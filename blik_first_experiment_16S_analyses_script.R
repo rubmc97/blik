@@ -204,8 +204,6 @@ physeq_blik = phyloseq(otu_table(asvs, taxa_are_rows = T),
                            sample_data(metadata %>% as.data.frame() %>% column_to_rownames("#SampleID")))
 
 ##remove ASVs detected in the negative controls plus sequences not belonging to bacteria nor archaea
-library(decontam)
-
 sample_data(physeq_blik)$is.neg <- sample_data(physeq_blik)$Field_type == "negative"
 
 #identify the contaminants
@@ -259,32 +257,50 @@ st.order = c("March", "June", "November") #order for the facet
 
 observed_asv_merged$Sampling_time = factor(observed_asv_merged$Sampling_time, levels = st.order) #order of the facet
 
-
 observed.asvs.plot = ggplot(observed_asv_merged, aes(x = factor(Soil, levels = custom_order), y = observed, color = Field_type)) +
   geom_boxplot() +
   geom_jitter(aes(color = Field_type), size = 2, alpha = 0.5) +
   facet_grid("Sampling_time" ,drop = FALSE) +
   theme(ylab(label = "Total ASVs number")) + guides(color = FALSE)
 
-total.asvs.plot + theme_pubclean() + 
+observed.asvs.plot + theme_pubclean() + 
   scale_color_manual(values = my_colors) +
   stat_compare_means(method = "wilcox.test",
                      label = "p.signif", p.adjust.method = "fdr",
                      comparisons = my_comparisons, size = 4, 
                      vjust = 1.5, hide.ns = T) #add wilcox's statistics to the plot
 
-##PCoAs
-physeq_blik_filt<sampling_time> %>%
+##Ordination with PCoAs
+#subsetting for sampling time
+blik.sp = subset_samples(physeq_blik_filt, Sampling_time == "March")
+blik.su = subset_samples(physeq_blik_filt, Sampling_time == "June")
+blik.au = subset_samples(physeq_blik_filt, Sampling_time == "November")
+
+pcoa.sp = blik.sp %>%
   dist_calc("bray") %>%
   ord_calc("PCoA") %>%
-  ord_plot(color = "Field_type", shape = "Sampling_time", size = 5)
+  ord_plot(color = "Field_type", shape = "Sampling_time", size = 5) #for March
+
+pcoa.su = blik.su %>%
+  dist_calc("bray") %>%
+  ord_calc("PCoA") %>%
+  ord_plot(color = "Field_type", shape = "Sampling_time", size = 5) #for June
+
+pcoa.au = blik.au %>%
+  dist_calc("bray") %>%
+  ord_calc("PCoA") %>%
+  ord_plot(color = "Field_type", shape = "Sampling_time", size = 5) #for November
+
+##merge the PCoA plots
+
+grid.arrange(pcoa.sp , pcoa.su, pcoa.au, ncol = 3) #combine the PCOA plots
 
 ##PERMOVA tests for differences between field types in microbial composition
-bray = distance(physeq_blik<sampling_time>, method = "bray")
+bray = distance(physeq_blik_filt_<sampling_time>, method = "bray")
 sample.df = data.frame(sample_data(physeq_blik_filt<sampling_time))
 adonis2(bray ~ Field_type, data = sample.df)
 
-##Core microbiome pre-processing: filtering of ASVs that only occur in 60% of each sample collection (3 out of 5 replicates)
+##Core microbiome pre-processing to filter for ASVs that only occur in 60% of each sample collection (3 out of 5 replicates)
 melted = physeq_blik_filt %>%
   psmelt()
 
@@ -297,15 +313,14 @@ filtered =
 shared_asv = filtered$OTU
 
 #Remove the ASVs that are did not pass the filtering step
-phy60 = physeq_blik %>% prune_taxa(shared_asv, .)
+phy60 = physeq_blik_filt %>% prune_taxa(shared_asv, .)
 
-library(microbiome)
-library(ggvenn)
-
+#subset for sampling time
 blik_sp = subset_samples(phy60, Sampling_time == "March")
 blik_su = subset_samples(phy60, Sampling_time == "June")
 blik_au = subset_samples(phy60, Sampling_time == "November")
 
+#determine parameters for the core
 detection_core = "0.01"
 prevalence_core = "0.6"
 venn_list = list()
@@ -333,19 +348,13 @@ grid.arrange(venn_sp, venn_su, venn_au, ncol = 3) #combine the Venn diagrams
 sub.fps = subset_samples(physeq_blik_filt, Field_type %in% c("FP-C","FP-G")) #subset for only the floodplain samples
 sub.gc = subset_samples(physeq_blik_filt, Field_type %in% c("C","G"))
 
- #remove taxa with 0 reads
-
-fps.sp = subset_samples(sub.fps, Sampling_time == "March")
-fps.su = amp_subset_samples(sub.fps, Sampling_time == "June")
-fps.au = amp_subset_samples(sub.fps, Sampling_time == "November")
-
 #filter out the taxa with all 0s after the subset
 fps.sp = prune_taxa(taxa_sums(fps.sp) > 0, fps.sp) 
 fps.su = prune_taxa(taxa_sums(fps.su) > 0, fps.su) 
 fps.au = prune_taxa(taxa_sums(fps.au) > 0, fps.au)
 
 mm_edger_<st> = run_edger(
-  fp_blik_<st>,
+  fps.<st>,
   group = "Field_type",
   pvalue_cutoff = 1,
   p_adjust = "fdr")
@@ -355,12 +364,12 @@ library(ggplot2)
 p_cutoff = 0.05
 fc_cutoff = 2
 
-edgeR_<sampling_time> = edgeR_<sampling_time>[!duplicated(edgeR_<sampling_time>$padj, fromLast = TRUE), ]
+edgeR_<sampling_time> = mm_edger_<st>[!duplicated(edgeR_<sampling_time>$padj, fromLast = TRUE), ]
 
 sub_edgeR_<sampling_time> = subset(edgeR_<sampling_time>, padj < p_cutoff & abs(ef_logFC) > fc_cutoff)
 sub_edgeR_<sampling_time> = sub_edgeR_au[!duplicated(sub_edgeR_<sampling_time>$padj, fromLast = TRUE), ]
 
-volc.sp = ggplot(edgeR_<sampling_time>, aes(x=ef_logFC, y=-log10(padj), color=enrich_group)) +
+volc.sp = ggplot(mm_edger_<st>, aes(x=ef_logFC, y=-log10(padj), color=enrich_group)) +
   geom_point(size = 2.5) +
   ylab("-log10 padj") +
   xlab("log2 Fold Change") + ggtitle("<sampling_time>") +
