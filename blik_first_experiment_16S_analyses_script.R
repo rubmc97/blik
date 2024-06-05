@@ -270,6 +270,19 @@ observed.asvs.plot + theme_pubclean() +
                      comparisons = my_comparisons, size = 4, 
                      vjust = 1.5, hide.ns = T) #add wilcox's statistics to the plot
 
+##Plot results of 16S rRNA gene qPCRs
+biomass.blik1 = read.csv("16SqPCR_first_exp_0523.csv", header = T) #load the .csv with the results
+
+facet_order = c("March", "June", "November")
+plot.biomass.blik1 = ggplot(biomass.blik1, aes(x = factor(Soil, levels = custom_order), y = copies.soil, fill = Field_type)) +
+  geom_boxplot() +
+  geom_jitter(color = "black", size = 0.4, alpha = 0.9) +
+  facet_grid( ~ factor(Sampling_time, levels = facet_order), scales = "free_y") +
+  scale_fill_manual(values = my_colors) +  # Set custom colors
+  ggpubr::theme_pubclean() +
+ggpubr::stat_compare_means(comparisons = list(c("G1", "C1"), c("G2", "C2"), c("G3", "C3"), c("FP-G", "FP-C")), label = "p.adjust", hide.ns = T, method = "wilcox.test") +
+labs(y = "16S rRNA gene copies per g-1 dry soil", x = "Sampling points") + guides(fill = guide_legend(title = "Site"))
+
 ##Ordination with PCoAs
 #subsetting for sampling time
 blik.sp = subset_samples(physeq_blik_filt, Sampling_time == "March")
