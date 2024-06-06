@@ -284,34 +284,29 @@ ggpubr::stat_compare_means(comparisons = list(c("G1", "C1"), c("G2", "C2"), c("G
 labs(y = "16S rRNA gene copies per g-1 dry soil", x = "Sampling points") + guides(fill = guide_legend(title = "Site"))
 
 ##Ordination with PCoAs
-#subsetting for sampling time
+#subsetting by sampling time for the stats
 blik.sp = subset_samples(physeq_blik_filt, Sampling_time == "March")
 blik.su = subset_samples(physeq_blik_filt, Sampling_time == "June")
 blik.au = subset_samples(physeq_blik_filt, Sampling_time == "November")
 
-pcoa.sp = blik.sp %>%
-  dist_calc("bray") %>%
-  ord_calc("PCoA") %>%
-  ord_plot(color = "Field_type", shape = "Sampling_time", size = 5) #for March
-
-pcoa.su = blik.su %>%
-  dist_calc("bray") %>%
-  ord_calc("PCoA") %>%
-  ord_plot(color = "Field_type", shape = "Sampling_time", size = 5) #for June
-
-pcoa.au = blik.au %>%
-  dist_calc("bray") %>%
-  ord_calc("PCoA") %>%
-  ord_plot(color = "Field_type", shape = "Sampling_time", size = 5) #for November
-
-##merge the PCoA plots
-
-grid.arrange(pcoa.sp , pcoa.su, pcoa.au, ncol = 3) #combine the PCOA plots
-
 ##PERMOVA tests for differences between field types in microbial composition
-bray = distance(physeq_blik_filt_<sampling_time>, method = "bray")
-sample.df = data.frame(sample_data(physeq_blik_filt<sampling_time))
+bray = distance(blik.<sampling_time>, method = "bray")
+sample.df = data.frame(sample_data(blik.<sampling_time))
 adonis2(bray ~ Field_type, data = sample.df)
+
+##Plotting the PCoAs
+ord_plot = plot_ordination(physeq_blik_filt, ordination, type="samples", color="Field_type",
+                         shape = "catena_level") +
+  geom_point(size=4) + scale_color_manual(values = my_colors) + facet_grid(~ factor(Sampling_time, levels = facet_order)) +
+  stat_ellipse(type = "t") + ggpubr::theme_pubr()
+
+ord_plot + 
+  annotate("text", x = 0.6, y = 0.7, label = "P-value < 0.001 ***", 
+           data = data.frame(Time = "Time1"), size = 2, color = "black") +
+  annotate("text", x = 0.6, y = 0.7, label = "P-value < 0.001 ***", 
+           data = data.frame(Time = "Time2"), size = 2, color = "black") +
+  annotate("text", x = 0.6, y = 0.7, label = "P-value < 0.001 ***", 
+           data = data.frame(Time = "Time3"), size = 2, color = "black") #to include the results of the PERMANOVA tests
 
 ##Core microbiome pre-processing to filter for ASVs that only occur in 60% of each sample collection (3 out of 5 replicates)
 melted = physeq_blik_filt %>%
