@@ -7,4 +7,4 @@ Repository containing the code behind the processing and analysis of the dataset
 5Institute of Meteorology and Climate Research, Atmospheric Environmental Research, Karlsruhe Institute of Technology, Kreuzeckbahnstraße 19, 82467 Garmisch-Partenkirchen, Germany
 
 Contains:
-microDweller.rmd: script used to process and analyse the 16S rRNA gene amplicon sequencing dataset of the experiment.
+blik_first_experiment_16S_analyses_script.R: script used to process and analyse the 16S rRNA gene amplicon sequencing dataset of the experiment
