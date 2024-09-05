@@ -1,7 +1,7 @@
 ---
-title: "Land use drives microbial community composition of directly adjacent grasslands"
+title: "Land use drives prokaryotic community composition of directly adjacent grasslands"
 author: "Martinez-Cuesta, R."
-date: "04.06.2024"
+date: "05.09.2024"
 ---
 ###DADA2 processing of 16S rRNA gene amplicon sequences:
 library(dada2)
@@ -351,49 +351,165 @@ library(gridExtra)
 
 grid.arrange(venn_sp, venn_su, venn_au, ncol = 3) #combine the Venn diagrams
 
-##LDA analysis with edgeR comparing the two floodplains using the three seasonal subsets of the floodplain sites
+##LDA analysis with edgeR comparing the two floodplains and the grassland with the cropland using the three seasonal subsets
 
 sub.fps = subset_samples(physeq_blik_filt, Field_type %in% c("FP-C","FP-G")) #subset for only the floodplain samples
 sub.gc = subset_samples(physeq_blik_filt, Field_type %in% c("C","G"))
 
+#sub-setting for sampling time
+gc.sp = subset_samples(sub.gc, Sampling_time == "March")
+gc.su = amp_subset_samples(sub.gc, Sampling_time == "June")
+gc.au = amp_subset_samples(sub.gc, Sampling_time == "November")
+
+fps.sp = subset_samples(sub.fps, Sampling_time == "March")
+fps.su = amp_subset_samples(sub.fps, Sampling_time == "June")
+fps.au = amp_subset_samples(sub.fps, Sampling_time == "November")
+
 #filter out the taxa with all 0s after the subset
+gc.sp = prune_taxa(taxa_sums(gc.sp) > 0, gc.sp) 
+gc.su = prune_taxa(taxa_sums(gc.su) > 0, gc.su) 
+gc.au = prune_taxa(taxa_sums(gc.au) > 0, gc.au)
+
 fps.sp = prune_taxa(taxa_sums(fps.sp) > 0, fps.sp) 
 fps.su = prune_taxa(taxa_sums(fps.su) > 0, fps.su) 
 fps.au = prune_taxa(taxa_sums(fps.au) > 0, fps.au)
 
-mm_edger_<st> = run_edger(
-  fps.<st>,
+edgeR_gc_<sampling_time> = run_edger(
+  gc.<st>,
   group = "Field_type",
-  pvalue_cutoff = 1,
-  p_adjust = "fdr")
+  pvalue_cutoff = 0.001,
+  p_adjust = "fdr"
+  norm = "none")
 
-library(ggrepel)
-library(ggplot2)
-p_cutoff = 0.05
-fc_cutoff = 2
+edgeR_fp_<sampling_time> = run_edger(
+  fp.<st>,
+  group = "Field_type",
+  pvalue_cutoff = 0.001,
+  p_adjust = "fdr"
+  norm = "none")
 
-edgeR_<sampling_time> = mm_edger_<st>[!duplicated(edgeR_<sampling_time>$padj, fromLast = TRUE), ]
+fc_cutoff  = 2
 
-sub_edgeR_<sampling_time> = subset(edgeR_<sampling_time>, padj < p_cutoff & abs(ef_logFC) > fc_cutoff)
-sub_edgeR_<sampling_time> = sub_edgeR_au[!duplicated(sub_edgeR_<sampling_time>$padj, fromLast = TRUE), ]
+#remove duplicates
+edgeR_gc_<sampling_time> = edgeR_gc_<sampling_time>[!duplicated(edgeR_gc_<sampling_time>$padj, fromLast = TRUE), ]
+edgeR_fp_<sampling_time> = edgeR_fp_<sampling_time>[!duplicated(edgeR_fp_<sampling_time>$padj, fromLast = TRUE), ]
 
-volc.sp = ggplot(mm_edger_<st>, aes(x=ef_logFC, y=-log10(padj), color=enrich_group)) +
-  geom_point(size = 2.5) +
-  ylab("-log10 padj") +
-  xlab("log2 Fold Change") + ggtitle("<sampling_time>") +
-  gghighlight(padj < p_cutoff & abs(ef_logFC) > fc_cutoff, use_direct_label = F, label_key = enrich_group) +
-  ggpubr::theme_pubr() +
-  geom_text_repel(data = subset(sub_edgeR_<sampling_time>, padj < p_cutoff & abs(ef_logFC) > fc_cutoff),
-                  aes(label = feature), box.padding = 0.9, max.overlaps = 100, size= 2) +
-  geom_vline(xintercept = fc_cutoff, alpha = 0.4, linetype = "dashed") +
-  geom_vline(xintercept = -fc_cutoff, alpha = 0.4, linetype = "dashed") +
-  geom_hline(yintercept = -log10(p_cutoff), alpha = 0.4, linetype = "dashed") +
-  scale_color_manual("Enriched in",values=c("#FFCC33", "purple"))#or #"forestgreen", "royalblue1" for C and G
-+ theme(plot.title = element_text(size=11))
+#set the threshold for log2FoldChange
+edge.fp.<sampling_time> = subset(edgeR_fp_<sampling_time>, abs(ef_logFC) > fc_cutoff)
+edge.gc.<sampling_time> = subset(edgeR_gc_<sampling_time>, abs(ef_logFC) > fc_cutoff)
 
-volc.all.fps = ggarrange(volc.sp, volc.su, volc.au, ncol = 3, labels = c("A", "B", "C")) #arrange the three plots in one
+#order the markers for log2FoldChange
+edge.gc.sp$feature = fct_reorder(edge.gc.sp$feature, edge.gc.sp$ef_logFC, .desc = TRUE)
+edge.gc.su$feature = fct_reorder(edge.gc.su$feature, edge.gc.su$ef_logFC, .desc = TRUE)
+edge.gc.au$feature = fct_reorder(edge.gc.au$feature, edge.gc.au$ef_logFC, .desc = TRUE)
 
-#repeated the same with grassland and cropland
+colors2 = c("forestgreen", "royalblue1")
+
+#plotting the results of the cropland and grassland
+bp.gc.sp = ggplot(edge.gc.sp, aes(x = ef_logFC, y = feature)) + 
+  geom_point(aes(size = pvalue, fill = factor(enrich_group)), shape = 21) +
+  theme(panel.grid.major = element_line(linetype = 1, color = "grey"),
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0),
+        panel.background = element_blank()) +
+  ylab("Taxa") +
+  xlab("log2 Fold Change") +
+  scale_fill_manual(values = colors2) +
+  scale_size_continuous(name = "P.value", breaks = c(1e-05, 2e-05, 3e-05, 4e-05)) +
+  theme_bw() +
+  theme(legend.text = element_text(size = 10)) +
+  theme(axis.text.y = element_text(face = "italic")) +
+  guides(fill = guide_legend(title = "Field type")) + 
+  labs(title = "March")
+
+bp.gc.su = ggplot(edge.gc.su, aes(x = ef_logFC, y = feature)) + 
+  geom_point(aes(size = pvalue, fill = factor(enrich_group)), shape = 21) +
+  theme(panel.grid.major = element_line(linetype = 1, color = "grey"),
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0),
+        panel.background = element_blank()) +
+  ylab("Taxa") +
+  xlab("log2 Fold Change") +
+  scale_fill_manual(values = colors2) +
+  scale_size_continuous(name = "P.value", breaks = c(1e-05, 2e-05, 3e-05, 4e-05)) +
+  theme_bw() +
+  theme(legend.text = element_text(size = 10)) +
+  theme(axis.text.y = element_text(face = "italic")) +
+  guides(fill = guide_legend(title = "Field type")) + 
+  labs(title = "June")
+
+bp.gc.au = ggplot(edge.gc.au, aes(x = ef_logFC, y = feature)) + 
+  geom_point(aes(size = pvalue, fill = factor(enrich_group)), shape = 21) +
+  theme(panel.grid.major = element_line(linetype = 1, color = "grey"),
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0),
+        panel.background = element_blank()) +
+  ylab("Taxa") +
+  xlab("log2 Fold Change") +
+  scale_fill_manual(values = colors2) +
+  scale_size_continuous(name = "P.value", breaks = c(1e-05, 2e-05, 3e-05, 4e-05)) +
+  theme_bw() +
+  theme(legend.text = element_text(size = 10)) +
+  theme(axis.text.y = element_text(face = "italic")) +
+  guides(fill = guide_legend(title = "Field type")) + 
+  labs(title = "November")
+
+#combining the plots
+all.gc = ggpubr::ggarrange(bp.gc.sp, bp.gc.su, bp.gc.au, ncol = 3, align = "hv", common.legend = T)
+
+#same for the floodplain samples
+edge.fp.sp$feature = fct_reorder(edge.fp.sp$feature, edge.fp.sp$ef_logFC, .desc = TRUE)
+edge.fp.su$feature = fct_reorder(edge.fp.su$feature, edge.fp.su$ef_logFC, .desc = TRUE)
+edge.fp.au$feature = fct_reorder(edge.fp.au$feature, edge.fp.au$ef_logFC, .desc = TRUE)
+
+colors = c("#FFCC33", "purple")
+
+bp.fp.sp = ggplot(edge.fp.sp, aes(x = ef_logFC, y = feature)) + 
+  geom_point(aes(size = pvalue, fill = factor(enrich_group)), shape = 21) +
+  theme(panel.grid.major = element_line(linetype = 1, color = "grey"),
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0),
+        panel.background = element_blank()) +
+  ylab("Taxa") +
+  xlab("log2 Fold Change") +
+  scale_fill_manual(values = colors) +
+  scale_size_continuous(name = "P.value", breaks = c(2e-04, 4e-04, 6e-04, 8e-04)) +
+  theme_bw() +
+  theme(legend.text = element_text(size = 10)) +
+  theme(axis.text.y = element_text(face = "italic")) +
+  guides(fill = guide_legend(title = "Field type")) + 
+  labs(title = "March")
+
+bp.fp.su = ggplot(edge.fp.su, aes(x = ef_logFC, y = feature)) + 
+  geom_point(aes(size = pvalue, fill = factor(enrich_group)), shape = 21) +
+  theme(panel.grid.major = element_line(linetype = 1, color = "grey"),
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0),
+        panel.background = element_blank()) +
+  ylab("Taxa") +
+  xlab("log2 Fold Change") +
+  scale_fill_manual(values = colors) +
+  scale_size_continuous(name = "P.value", breaks = c(2e-04, 4e-04, 6e-04, 8e-04)) +
+  theme_bw() +
+  theme(legend.text = element_text(size = 10)) +
+  theme(axis.text.y = element_text(face = "italic")) +
+  guides(fill = guide_legend(title = "Field type")) + 
+  labs(title = "June")
+
+bp.fp.au = ggplot(edge.fp.au, aes(x = ef_logFC, y = feature)) + 
+  geom_point(aes(size = pvalue, fill = factor(enrich_group)), shape = 21) +
+  theme(panel.grid.major = element_line(linetype = 1, color = "grey"),
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0),
+        panel.background = element_blank()) +
+  ylab("Taxa") +
+  xlab("log2 Fold Change") +
+  scale_fill_manual(values = colors) +
+  scale_size_continuous(name = "P.value", breaks = c(2e-04, 4e-04, 6e-04, 8e-04)) +
+  theme_bw() +
+  theme(legend.text = element_text(size = 10)) +
+  theme(axis.text.y = element_text(face = "italic")) +
+  guides(fill = guide_legend(title = "Field type")) + 
+  labs(title = "November")
+
+#combining the three plots of the floodplains
+all.fp = ggpubr::ggarrange(bp.fp.sp, bp.fp.su, bp.fp.au, ncol = 3, align = "hv", common.legend = T)
+#combining all the plots
+all.gc.fp = ggpubr::ggarrange(all.gc, all.fp, nrow = 2, align = "hv", common.legend = F, labels = c("A", "B"))
 
 ##Microbial Network Analysis
 library(NetCoMi)
